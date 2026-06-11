@@ -1,0 +1,15 @@
+name: Crqzys_Server_Selector
+version: '${version}'
+main: Crqzys_Server_Selector.crqzys_Server_Selector.Crqzys_Server_Selector
+api-version: '1.21'
+load: POSTWORLD
+
+commands:
+  selector:
+    description: Open the server selector
+    usage: /selector [reload]
+
+permissions:
+  serverselector.reload:
+    description: Reload the config
+    default: op

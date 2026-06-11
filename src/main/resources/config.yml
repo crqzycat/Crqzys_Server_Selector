@@ -1,0 +1,45 @@
+# ==============================
+#   Crqzy's Server Selector
+# ==============================
+
+compass:
+  material: COMPASS
+  name: "&6&lServer Selector"
+  lore:
+    - "&7Right-click to open"
+
+gui:
+  title: "&8&lServer Selector"
+  size: 27          # Must be 9, 18, 27, 36, 45 or 54
+  fill-border: true
+
+# Each server entry:
+#   material: item shown in GUI
+#   name:     display name (supports & color codes)
+#   lore:     list of lore lines
+#   id:       BungeeCord server name (from config.yml in BungeeCord)
+#   slot:     inventory slot (0-based)
+servers:
+  lobby:
+    material: EMERALD
+    name: "&a&lLobby"
+    lore:
+      - "&7The main lobby"
+    id: lobby
+    slot: 11
+
+  survival:
+    material: GRASS_BLOCK
+    name: "&2&lSurvival"
+    lore:
+      - "&7Classic survival"
+    id: survival
+    slot: 13
+
+  minigames:
+    material: FIREWORK_ROCKET
+    name: "&e&lMinigames"
+    lore:
+      - "&7Play fun minigames"
+    id: minigames
+    slot: 15
