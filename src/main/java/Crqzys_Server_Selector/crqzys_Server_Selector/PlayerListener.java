@@ -5,6 +5,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
@@ -70,20 +71,42 @@ public class PlayerListener implements Listener {
         }
     }
 
+    @EventHandler
+    public void onDrop(PlayerDropItemEvent event) {
+        if (plugin.getConfig().getBoolean("compass.droppable", false)) return;
+
+        ItemStack item = event.getItemDrop().getItemStack();
+        if (!item.hasItemMeta()) return;
+
+        String expectedName = ColorUtil.color(plugin.getConfig().getString("compass.name", "&6&lServer Selector"));
+        if (expectedName.equals(item.getItemMeta().getDisplayName())) {
+            event.setCancelled(true);
+        }
+    }
+
     private void giveCompassIfMissing(Player player) {
         String materialName = plugin.getConfig().getString("compass.material", "COMPASS");
         Material material = Material.matchMaterial(materialName);
         if (material == null) material = Material.COMPASS;
 
         // Check if player already has the selector compass
-        String expectedName = ColorUtil.color(plugin.getConfig().getString("compass.name", "&aServer Selector"));
+        String expectedName = ColorUtil.color(plugin.getConfig().getString("compass.name", "&6&lServer Selector"));
         for (ItemStack item : player.getInventory().getContents()) {
             if (item == null) continue;
             if (item.getType() != material) continue;
             if (!item.hasItemMeta()) continue;
-            if (expectedName.equals(item.getItemMeta().getDisplayName())) return; // already has it
+            if (expectedName.equals(item.getItemMeta().getDisplayName())) return;
         }
 
-        player.getInventory().addItem(CompassItem.build(plugin));
+        int slot = plugin.getConfig().getInt("compass.slot", 4); // 0-based, default = slot 5
+        if (slot < 0 || slot > 8) slot = 4;
+
+        ItemStack existing = player.getInventory().getItem(slot);
+        if (existing != null && existing.getType() != Material.AIR) {
+            // Slot occupied — fall back to first free slot
+            player.getInventory().addItem(CompassItem.build(plugin));
+        } else {
+            player.getInventory().setItem(slot, CompassItem.build(plugin));
+        }
     }
 }

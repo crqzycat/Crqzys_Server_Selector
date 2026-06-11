@@ -7,6 +7,8 @@ compass:
   name: "&6&lServer Selector"
   lore:
     - "&7Right-click to open"
+  slot: 4        # Hotbar-Slot (0-8), 4 = Slot 5
+  droppable: false
 
 gui:
   title: "&8&lServer Selector"
