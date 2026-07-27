@@ -1,6 +1,7 @@
 plugins {
     id("java-library")
     id("xyz.jpenilla.run-paper") version "3.0.2"
+    id("org.gradle.toolchains.foojay-resolver-convention") version "0.9.0"
 }
 
 repositories {
