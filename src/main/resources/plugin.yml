@@ -1,7 +1,7 @@
 name: Crqzys_Server_Selector
 version: '${version}'
 main: Crqzys_Server_Selector.crqzys_Server_Selector.Crqzys_Server_Selector
-api-version: '1.21'
+api-version: '26.1'
 load: POSTWORLD
 
 commands:
