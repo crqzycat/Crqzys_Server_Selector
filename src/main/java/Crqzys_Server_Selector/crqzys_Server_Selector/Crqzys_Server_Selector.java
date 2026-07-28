@@ -44,9 +44,7 @@ public final class Crqzys_Server_Selector extends JavaPlugin {
 
         // Players are already online when the plugin is enabled through a reload or a plugin manager.
         for (Player player : getServer().getOnlinePlayers()) {
-            if (settings.item().giveOnJoin()) {
-                playerListener.giveItem(player);
-            }
+            playerListener.updateItem(player, settings.item().giveOnJoin());
             proxy.requestCurrentServer(player);
         }
     }
@@ -87,6 +85,12 @@ public final class Crqzys_Server_Selector extends JavaPlugin {
             command.refreshPermission();
             for (Player player : getServer().getOnlinePlayers()) {
                 player.updateCommands();
+            }
+        }
+        if (playerListener != null) {
+            // Otherwise players keep the item built from the previous config until they reconnect.
+            for (Player player : getServer().getOnlinePlayers()) {
+                playerListener.updateItem(player, settings.item().giveOnJoin());
             }
         }
         return true;

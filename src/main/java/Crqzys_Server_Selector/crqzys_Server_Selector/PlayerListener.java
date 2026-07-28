@@ -16,7 +16,9 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,9 +39,7 @@ final class PlayerListener implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        if (plugin.settings().item().giveOnJoin()) {
-            giveItem(player);
-        }
+        updateItem(player, plugin.settings().item().giveOnJoin());
         if (plugin.proxy().currentServer() == null) {
             plugin.proxy().requestCurrentServer(player);
         }
@@ -47,9 +47,7 @@ final class PlayerListener implements Listener {
 
     @EventHandler
     public void onRespawn(PlayerRespawnEvent event) {
-        if (plugin.settings().item().giveOnRespawn()) {
-            giveItem(event.getPlayer());
-        }
+        updateItem(event.getPlayer(), plugin.settings().item().giveOnRespawn());
     }
 
     @EventHandler
@@ -124,35 +122,50 @@ final class PlayerListener implements Listener {
         return previous == null || now - previous > OPEN_COOLDOWN_MILLIS;
     }
 
-    void giveItem(Player player) {
+    /**
+     * @param handOutIfMissing whether a player who carries no selector item should be given one; an item
+     *                         the player already carries is refreshed either way
+     */
+    void updateItem(Player player, boolean handOutIfMissing) {
         PluginConfig.ItemSettings settings = plugin.settings().item();
         if (!settings.enabled() || !Perms.has(player, plugin.settings().permissions().item())) {
             return;
         }
 
         PlayerInventory inventory = player.getInventory();
-        int wanted = settings.slot();
-        int existing = findExisting(inventory);
+        List<Integer> existing = findExisting(inventory);
 
-        if (existing == wanted) {
+        if (existing.isEmpty()) {
+            if (handOutIfMissing) {
+                place(player, SelectorItem.build(plugin), settings.slot());
+            }
             return;
         }
-        if (existing >= 0) {
-            if (!settings.forceSlot()) {
-                return;
-            }
-            inventory.setItem(existing, null);
+
+        // Rebuilt rather than left alone: the config may have changed its name, lore or material since
+        // it was handed out, and players keep the item in their inventory across restarts.
+        ItemStack item = SelectorItem.build(plugin);
+        for (int slot : existing) {
+            inventory.setItem(slot, item);
         }
 
-        ItemStack item = SelectorItem.build(plugin);
-        ItemStack occupant = inventory.getItem(wanted);
-        boolean slotFree = occupant == null || occupant.getType() == Material.AIR;
+        int wanted = settings.slot();
+        if (!settings.forceSlot() || existing.contains(wanted)) {
+            return;
+        }
+        inventory.setItem(existing.get(0), null);
+        place(player, item, wanted);
+    }
 
-        if (slotFree) {
+    private void place(Player player, ItemStack item, int wanted) {
+        PlayerInventory inventory = player.getInventory();
+        ItemStack occupant = inventory.getItem(wanted);
+
+        if (occupant == null || occupant.getType() == Material.AIR) {
             inventory.setItem(wanted, item);
             return;
         }
-        if (!settings.forceSlot()) {
+        if (!plugin.settings().item().forceSlot()) {
             giveOrDrop(player, item);
             return;
         }
@@ -161,13 +174,15 @@ final class PlayerListener implements Listener {
         giveOrDrop(player, occupant);
     }
 
-    private int findExisting(PlayerInventory inventory) {
+    /** Every slot holding a selector item; more than one only happens with items from older builds. */
+    private List<Integer> findExisting(PlayerInventory inventory) {
+        List<Integer> slots = new ArrayList<>(1);
         for (int slot = 0; slot < inventory.getSize(); slot++) {
             if (SelectorItem.matches(plugin, inventory.getItem(slot))) {
-                return slot;
+                slots.add(slot);
             }
         }
-        return -1;
+        return slots;
     }
 
     private void giveOrDrop(Player player, ItemStack stack) {
