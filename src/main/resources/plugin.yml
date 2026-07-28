@@ -1,15 +1,12 @@
 name: Crqzys_Server_Selector
 version: '${version}'
 main: Crqzys_Server_Selector.crqzys_Server_Selector.Crqzys_Server_Selector
-api-version: '26.1'
-load: POSTWORLD
+description: Configurable server selector menu for proxied networks.
+# 1.21.11 is the oldest supported release; newer servers accept older api-versions.
+api-version: '1.21'
+# LuckPerms only needs to load first so its permission calculator is ready.
+softdepend:
+  - LuckPerms
 
-commands:
-  selector:
-    description: Open the server selector
-    usage: /selector [reload]
-
-permissions:
-  serverselector.reload:
-    description: Reload the config
-    default: op
+# The command and every permission node are declared at runtime from config.yml,
+# so both stay configurable without touching this file.

@@ -3,110 +3,176 @@ package Crqzys_Server_Selector.crqzys_Server_Selector;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 
-public class PlayerListener implements Listener {
+import java.util.Iterator;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+/** Hands out the selector item and opens the menu when it is used. */
+final class PlayerListener implements Listener {
+
+    /** Guards against the menu being opened twice by a single click. */
+    private static final long OPEN_COOLDOWN_MILLIS = 250L;
 
     private final Crqzys_Server_Selector plugin;
+    private final Map<UUID, Long> lastOpen = new ConcurrentHashMap<>();
 
-    public PlayerListener(Crqzys_Server_Selector plugin) {
+    PlayerListener(Crqzys_Server_Selector plugin) {
         this.plugin = plugin;
     }
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        giveCompassIfMissing(player);
-    }
-
-    @EventHandler
-    public void onInteract(PlayerInteractEvent event) {
-        Player player = event.getPlayer();
-        ItemStack item = event.getItem();
-        if (item == null) return;
-
-        String compassMaterial = plugin.getConfig().getString("compass.material", "COMPASS");
-        if (!item.getType().name().equals(compassMaterial)) return;
-
-        // Check if it's the selector compass by display name
-        if (!item.hasItemMeta()) return;
-        String expectedName = plugin.getConfig().getString("compass.name", "&aServer Selector");
-        String displayName = item.getItemMeta().getDisplayName();
-        if (!displayName.equals(ColorUtil.color(expectedName))) return;
-
-        event.setCancelled(true);
-        SelectorGUI.open(player, plugin);
-    }
-
-    @EventHandler
-    public void onInventoryClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player player)) return;
-
-        String title = plugin.getConfig().getString("gui.title", "&8Server Selector");
-        if (!event.getView().getTitle().equals(ColorUtil.color(title))) return;
-
-        event.setCancelled(true);
-
-        ItemStack clicked = event.getCurrentItem();
-        if (clicked == null || clicked.getType() == Material.AIR) return;
-        if (!clicked.hasItemMeta() || !clicked.getItemMeta().hasDisplayName()) return;
-
-        // Find which server was clicked by matching display name
-        var servers = plugin.getConfig().getConfigurationSection("servers");
-        if (servers == null) return;
-
-        for (String key : servers.getKeys(false)) {
-            String serverName = ColorUtil.color(plugin.getConfig().getString("servers." + key + ".name", key));
-            if (clicked.getItemMeta().getDisplayName().equals(serverName)) {
-                String serverId = plugin.getConfig().getString("servers." + key + ".id", key);
-                BungeeUtil.sendToServer(player, serverId);
-                player.closeInventory();
-                return;
-            }
+        if (plugin.settings().item().giveOnJoin()) {
+            giveItem(player);
+        }
+        if (plugin.proxy().currentServer() == null) {
+            plugin.proxy().requestCurrentServer(player);
         }
     }
 
     @EventHandler
+    public void onRespawn(PlayerRespawnEvent event) {
+        if (plugin.settings().item().giveOnRespawn()) {
+            giveItem(event.getPlayer());
+        }
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        lastOpen.remove(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler(priority = EventPriority.LOW)
+    public void onInteract(PlayerInteractEvent event) {
+        // Only one of the two hands should react, otherwise the menu opens and instantly reopens.
+        EquipmentSlot hand = event.getHand();
+        if (hand != EquipmentSlot.HAND && hand != EquipmentSlot.OFF_HAND) {
+            return;
+        }
+        if (!matchesConfiguredAction(event.getAction())) {
+            return;
+        }
+        if (!SelectorItem.matches(plugin, event.getItem())) {
+            return;
+        }
+
+        // Cancelled so the item cannot place blocks, break blocks or trigger the block it was aimed at.
+        event.setCancelled(true);
+
+        Player player = event.getPlayer();
+        if (!withinCooldown(player)) {
+            return;
+        }
+        if (!Perms.has(player, plugin.settings().permissions().open())) {
+            plugin.settings().messages().send(player, "no-permission");
+            return;
+        }
+
+        SelectorMenu.open(plugin, player);
+    }
+
+    @EventHandler(ignoreCancelled = true)
     public void onDrop(PlayerDropItemEvent event) {
-        if (plugin.getConfig().getBoolean("compass.droppable", false)) return;
-
-        ItemStack item = event.getItemDrop().getItemStack();
-        if (!item.hasItemMeta()) return;
-
-        String expectedName = ColorUtil.color(plugin.getConfig().getString("compass.name", "&6&lServer Selector"));
-        if (expectedName.equals(item.getItemMeta().getDisplayName())) {
+        if (plugin.settings().item().droppable()) {
+            return;
+        }
+        if (SelectorItem.matches(plugin, event.getItemDrop().getItemStack())) {
             event.setCancelled(true);
         }
     }
 
-    private void giveCompassIfMissing(Player player) {
-        String materialName = plugin.getConfig().getString("compass.material", "COMPASS");
-        Material material = Material.matchMaterial(materialName);
-        if (material == null) material = Material.COMPASS;
+    @EventHandler
+    public void onDeath(PlayerDeathEvent event) {
+        if (plugin.settings().item().droppable()) {
+            return;
+        }
+        // Otherwise the item is left on the ground for anyone to pick up, and the player gets a second one.
+        Iterator<ItemStack> drops = event.getDrops().iterator();
+        while (drops.hasNext()) {
+            if (SelectorItem.matches(plugin, drops.next())) {
+                drops.remove();
+            }
+        }
+    }
 
-        // Check if player already has the selector compass
-        String expectedName = ColorUtil.color(plugin.getConfig().getString("compass.name", "&6&lServer Selector"));
-        for (ItemStack item : player.getInventory().getContents()) {
-            if (item == null) continue;
-            if (item.getType() != material) continue;
-            if (!item.hasItemMeta()) continue;
-            if (expectedName.equals(item.getItemMeta().getDisplayName())) return;
+    private boolean matchesConfiguredAction(Action action) {
+        return switch (plugin.settings().item().openAction()) {
+            case RIGHT_CLICK -> action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK;
+            case LEFT_CLICK -> action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK;
+            case ANY -> action != Action.PHYSICAL;
+        };
+    }
+
+    private boolean withinCooldown(Player player) {
+        long now = System.currentTimeMillis();
+        Long previous = lastOpen.put(player.getUniqueId(), now);
+        return previous == null || now - previous > OPEN_COOLDOWN_MILLIS;
+    }
+
+    void giveItem(Player player) {
+        PluginConfig.ItemSettings settings = plugin.settings().item();
+        if (!settings.enabled() || !Perms.has(player, plugin.settings().permissions().item())) {
+            return;
         }
 
-        int slot = plugin.getConfig().getInt("compass.slot", 4); // 0-based, default = slot 5
-        if (slot < 0 || slot > 8) slot = 4;
+        PlayerInventory inventory = player.getInventory();
+        int wanted = settings.slot();
+        int existing = findExisting(inventory);
 
-        ItemStack existing = player.getInventory().getItem(slot);
-        if (existing != null && existing.getType() != Material.AIR) {
-            // Slot occupied — fall back to first free slot
-            player.getInventory().addItem(CompassItem.build(plugin));
-        } else {
-            player.getInventory().setItem(slot, CompassItem.build(plugin));
+        if (existing == wanted) {
+            return;
+        }
+        if (existing >= 0) {
+            if (!settings.forceSlot()) {
+                return;
+            }
+            inventory.setItem(existing, null);
+        }
+
+        ItemStack item = SelectorItem.build(plugin);
+        ItemStack occupant = inventory.getItem(wanted);
+        boolean slotFree = occupant == null || occupant.getType() == Material.AIR;
+
+        if (slotFree) {
+            inventory.setItem(wanted, item);
+            return;
+        }
+        if (!settings.forceSlot()) {
+            giveOrDrop(player, item);
+            return;
+        }
+
+        inventory.setItem(wanted, item);
+        giveOrDrop(player, occupant);
+    }
+
+    private int findExisting(PlayerInventory inventory) {
+        for (int slot = 0; slot < inventory.getSize(); slot++) {
+            if (SelectorItem.matches(plugin, inventory.getItem(slot))) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
+    private void giveOrDrop(Player player, ItemStack stack) {
+        for (ItemStack leftover : player.getInventory().addItem(stack).values()) {
+            player.getWorld().dropItemNaturally(player.getLocation(), leftover);
         }
     }
 }

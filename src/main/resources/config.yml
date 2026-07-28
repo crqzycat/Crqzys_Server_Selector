@@ -1,26 +1,88 @@
-# ==============================
+# =====================================================================
 #   Crqzy's Server Selector
-# ==============================
+#
+#   Works on Paper 1.21.11 and every newer release, including the 26.x line.
+#   Every text option accepts legacy '&' colour codes (&a, &#ff0055) as well as
+#   MiniMessage tags (<green>, <gradient:#ff0055:#00ffaa>).
+# =====================================================================
+
+# Used to warn you when the file predates new options. Do not edit.
+config-version: 2
+
+command:
+  # Command that opens the menu, without the leading slash.
+  # A config reload keeps serving the old name; restart the server to apply a new one.
+  name: "selector"
+  aliases:
+    - servers
+    - ss
+    - hub
+  description: "Open the server selector"
+  usage: "/<command> [reload]"
+
+permissions:
+  # Node required to open the menu. Leave empty ("") to skip the check entirely.
+  open: "serverselector.use"
+  # Value used for players with no explicit setting: true, false, op or not_op.
+  # 'true' means everybody may open the menu until you negate the node in LuckPerms:
+  #   /lp group default permission set serverselector.use false
+  open-default: true
+
+  # Node required for /<command> reload.
+  reload: "serverselector.reload"
+  reload-default: op
+
+  # Node required to receive the selector item.
+  item: "serverselector.item"
+  item-default: true
+
+  # Per server nodes are built as <server-prefix><server key>, e.g. serverselector.server.lobby
+  # Leave empty ("") to let everyone use every entry.
+  server-prefix: "serverselector.server."
+  server-default: true
 
 compass:
+  enabled: true
   material: COMPASS
   name: "&6&lServer Selector"
   lore:
     - "&7Right-click to open"
-  slot: 4        # Hotbar-Slot (0-8), 4 = Slot 5
+  # Inventory slot the item is placed in. 0-8 is the hotbar, 4 is its middle.
+  slot: 4
+  # Keep the item in that exact slot, moving whatever was there out of the way.
+  force-slot: true
+  # Allow players to drop the item. When false it is also kept out of death drops.
   droppable: false
+  # Prevent players from moving the item: no inventory moves, no drags, no hotbar swaps,
+  # no offhand swap, no putting it in an item frame and no consuming it.
+  locked: true
+  give-on-join: true
+  give-on-respawn: true
+  # Which interaction opens the menu: RIGHT_CLICK, LEFT_CLICK or ANY.
+  open-on: RIGHT_CLICK
 
 gui:
   title: "&8&lServer Selector"
-  size: 27          # Must be 9, 18, 27, 36, 45 or 54
-  fill-border: true
+  # Must be a multiple of 9, between 9 and 54.
+  size: 27
+  filler:
+    enabled: true
+    material: GRAY_STAINED_GLASS_PANE
+  close-on-click: true
 
-# Each server entry:
-#   material: item shown in GUI
-#   name:     display name (supports & color codes)
-#   lore:     list of lore lines
-#   id:       BungeeCord server name (from config.yml in BungeeCord)
-#   slot:     inventory slot (0-based)
+# Skip the connection when the player already is on the target server.
+# Needs the proxy to answer plugin messages (BungeeCord, or Velocity with
+# bungee-plugin-message-channel enabled in velocity.toml).
+prevent-connect-to-current: true
+
+# Each entry:
+#   material:                 item shown in the menu
+#   name:                     display name
+#   lore:                     list of lore lines
+#   id:                       server name as the proxy knows it
+#   slot:                     menu slot, 0 based, must fit inside gui.size
+#   permission:               optional override, "" disables the check for this entry
+#   hide-without-permission:  hide the entry instead of showing it as locked
 servers:
   lobby:
     material: EMERALD
@@ -29,6 +91,7 @@ servers:
       - "&7The main lobby"
     id: lobby
     slot: 11
+    hide-without-permission: false
 
   survival:
     material: GRASS_BLOCK
@@ -37,6 +100,7 @@ servers:
       - "&7Classic survival"
     id: survival
     slot: 13
+    hide-without-permission: false
 
   minigames:
     material: FIREWORK_ROCKET
@@ -45,3 +109,18 @@ servers:
       - "&7Play fun minigames"
     id: minigames
     slot: 15
+    hide-without-permission: false
+
+# Set any message to "" to silence it.
+messages:
+  prefix: "&8[&6Selector&8]&r "
+  no-permission: "%prefix%&cYou are not allowed to do that."
+  players-only: "%prefix%&cOnly players can use this command."
+  reloaded: "%prefix%&aConfiguration reloaded."
+  reload-failed: "%prefix%&cReload failed, check the console for details."
+  connecting: "%prefix%&7Connecting you to &f%server%&7..."
+  already-connected: "%prefix%&cYou are already connected to &f%server%&c."
+  server-no-permission: "%prefix%&cYou do not have access to &f%server%&c."
+  connect-failed: "%prefix%&cCould not reach the proxy, please try again later."
+  no-servers: "%prefix%&cNo servers are configured."
+  locked-lore: "&c&oLocked"
